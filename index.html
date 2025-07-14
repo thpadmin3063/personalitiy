@@ -162,13 +162,21 @@ aktualisierePresetDropdown();
     generiereFragefelder();
 
     function generiereFragefelder() {
-      const fragen = document.getElementById("fragenText").value.trim().split("\n");
+      const fragen = document
+        .getElementById("fragenText")
+        .value.split("\n")
+        .map(f => f.trim())
+        .filter(f => f);
       const container = document.getElementById("fragenContainer");
       container.innerHTML = "";
       fragen.forEach((frage, i) => {
         const wrapper = document.createElement("div");
         wrapper.className = "frage-container";
-        wrapper.innerHTML = `<label>${frage}</label><textarea id="antwort${i}"></textarea>`;
+        const label = document.createElement("label");
+        label.textContent = frage;
+        const textarea = document.createElement("textarea");
+        textarea.id = `antwort${i}`;
+        wrapper.append(label, textarea);
         container.appendChild(wrapper);
       });
     }
