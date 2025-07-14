@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Persönlichkeitsautomat 3000</title>
+  <style>
+    body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 2rem; background: #fefefe; color: #333; }
+    h1 { text-align: center; }
+    textarea, input, select, button {
+      width: 100%; padding: 8px; margin: 8px 0; border-radius: 5px; border: 1px solid #ccc;
+    }
+    button { background: #4caf50; color: white; border: none; cursor: pointer; }
+    button:hover { background: #45a049; }
+    .frage-container { margin-top: 1rem; }
+    #profil { white-space: pre-wrap; background: #f4f4f4; padding: 1rem; border-radius: 5px; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>🎛️ Persönlichkeitsautomat 3000</h1>
+  <label>API-Key</label>
+  <input id="apiKey" type="text" placeholder="sk-..." />
+  <div id="statusBox"></div>
+
+  <label>Name des Gastes</label>
+  <input type="text" id="gastName" placeholder="Vorname oder Spitzname" />
+
+  <label>Geburtsdatum</label>
+  <input type="date" id="geburtstag" />
+
+  <label>Fragen bearbeiten (eine pro Zeile)</label>
+  <textarea id="fragenText"></textarea>
+
+  <select id="presetSelect" onchange="ladePreset()"><option value="">– Auswahl –</option></select>
+  <button onclick="speicherePreset()">Preset speichern</button>
+  <button onclick="generiereFragefelder()">Fragen übernehmen</button>
+  <button onclick="shuffleFragen()">Fragen mischen</button>
+  <button onclick="generiereNeueFragen()">Neue Fragen generieren (KI)</button>
+  <div id="fragenContainer"></div>
+  <button onclick="generiereProfil()">Auswertung starten</button>
+  <div id="profil"></div>
+
+  <script>
+    const presets = JSON.parse(localStorage.getItem("presets") || '{}');
+    if (!presets["Gianluca"]) {
+      presets["Gianluca"] = [
+        "Wenn du einen Tag in einem Film leben müsstest – welcher wäre das und warum?",
+        "Wenn dich jemand fragt, woher du kommst – was antwortest du?",
+        "Was schiebst du immer wieder vor dir her, weil’s einfach mühsam ist?",
+        "Was war dein letzter innerer Applaus-Moment?",
+        "Supermarkt-Challenge: Welche drei Artikel würdest du kaufen, um die Kassiererin maximal zu verwirren?",
+        "Du darfst ein Abendessen mit drei Figuren haben – real oder fiktiv. Wen lädst du ein und warum?",
+        "Angenommen, du wirst verhaftet – wofür würde dich dein Umfeld am ehesten verdächtigen?",
+        "Wenn Geld absolut keine Rolle spielen würde – was würdest du beruflich machen, einfach nur aus Freude?",
+        "Was brauchst du, um dich rundum wohl und frisch zu fühlen – innen wie außen?",
+        "Wenn du einen neuen Feiertag erfinden könntest – was wäre das Thema und wie würde man feiern?"
+      ];
+    }
+
+    function aktualisierePresetDropdown() {
+      const select = document.getElementById("presetSelect");
+      select.innerHTML = '<option value="">– Auswahl –</option>';
+      Object.keys(presets).forEach(name => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        select.appendChild(option);
+      });
+    }
+
+    function ladePreset() {
+      const name = document.getElementById("presetSelect").value;
+      if (name && presets[name]) {
+        document.getElementById("fragenText").value = presets[name].join("\n");
+        generiereFragefelder();
+      }
+    }
+
+    function speicherePreset() {
+      const name = prompt("Name für Preset?");
+      if (!name) return;
+      const fragen = document.getElementById("fragenText").value.trim().split("\n");
+      presets[name] = fragen;
+      localStorage.setItem("presets", JSON.stringify(presets));
+      aktualisierePresetDropdown();
+      alert("Gespeichert als: " + name);
+    }
+
+    function generiereFragefelder() {
+      const fragen = document.getElementById("fragenText").value.trim().split("\n");
+      const container = document.getElementById("fragenContainer");
+      container.innerHTML = "";
+      fragen.forEach((frage, i) => {
+        const div = document.createElement("div");
+        div.className = "frage-container";
+        div.innerHTML = `<label>${frage}</label><textarea id="antwort${i}"></textarea>`;
+        container.appendChild(div);
+      });
+    }
+
+    async function generiereProfil() {
+      const fragen = document.getElementById("fragenText").value.trim().split("\n");
+      const antworten = fragen.map((_, i) => document.getElementById("antwort" + i)?.value || "");
+      const geburtstag = document.getElementById("geburtstag").value;
+      const gastName = document.getElementById("gastName").value;
+      const apiKey = document.getElementById("apiKey").value.trim();
+      if (!apiKey || !geburtstag || antworten.some(a => !a.trim()) || !gastName.trim()) {
+        alert("Bitte alles ausfüllen!");
+        return;
+      }
+      const geburtsTag = new Date(geburtstag).toLocaleDateString("de-DE", { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      const prompt = `Name: ${gastName}\nGeburtstag: ${geburtstag} (${geburtsTag})\n` + fragen.map((f, i) => `${f} – ${antworten[i]}`).join("\n") + "\nBitte analysiere die Persönlichkeit auf lustige, kreative Weise (ca. 2500 Zeichen).";
+      document.getElementById("profil").innerText = "⏳ Bitte warten ...";
+
+      try {
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: "gpt-4",
+            messages: [
+              { role: "system", content: "Du bist ein witziger, kreativer Persönlichkeitsanalytiker." },
+              { role: "user", content: prompt }
+            ],
+            max_tokens: 1500,
+            temperature: 0.9
+          })
+        });
+        const data = await res.json();
+        document.getElementById("profil").innerText = data.choices?.[0]?.message?.content || "Keine Antwort.";
+      } catch (e) {
+        document.getElementById("profil").innerText = "⚠️ Fehler bei der KI-Anfrage.";
+      }
+    }
+
+    async function generiereNeueFragen() {
+      const apiKey = document.getElementById("apiKey").value.trim();
+      if (!apiKey) return alert("API-Key fehlt.");
+      try {
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: "gpt-4",
+            messages: [{ role: "user", content: "Erstelle 10 lustige, originelle Podcast-Interviewfragen (eine pro Zeile)." }],
+            max_tokens: 500,
+            temperature: 0.95
+          })
+        });
+        const data = await res.json();
+        const fragen = data.choices?.[0]?.message?.content.trim();
+        if (fragen) {
+          document.getElementById("fragenText").value = fragen;
+          generiereFragefelder();
+        }
+      } catch (e) {
+        alert("Fehler beim Generieren.");
+      }
+    }
+
+    function shuffleFragen() {
+      const fragen = document.getElementById("fragenText").value.trim().split("\n");
+      for (let i = fragen.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [fragen[i], fragen[j]] = [fragen[j], fragen[i]];
+      }
+      document.getElementById("fragenText").value = fragen.join("\n");
+      generiereFragefelder();
+    }
+
+    function checkAPIStatus() {
+      const key = document.getElementById("apiKey").value.trim();
+      const box = document.getElementById("statusBox");
+      if (!key) {
+        box.innerText = "❌ Kein API Key eingetragen";
+        return;
+      }
+      fetch("https://api.openai.com/v1/models", {
+        headers: { "Authorization": `Bearer ${key}` }
+      })
+      .then(res => {
+        if (res.ok) {
+          box.innerText = "✅ API-Verbindung aktiv";
+        } else {
+          box.innerText = "⚠️ API-Key ungültig oder Verbindung gestört";
+        }
+      })
+      .catch(() => {
+        box.innerText = "⚠️ Verbindung fehlgeschlagen";
+      });
+    }
+
+    aktualisierePresetDropdown();
+    generiereFragefelder();
+    checkAPIStatus();
+    document.getElementById("apiKey").addEventListener("change", checkAPIStatus);
+  </script>
+</body>
+</html>
